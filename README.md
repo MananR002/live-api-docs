@@ -16,6 +16,9 @@ const { autoDocs } = require('./src/autoDocs');
 
 const app = express();
 
+// IMPORTANT: Apply body parsing middleware BEFORE autoDocs
+app.use(express.json());
+
 // Create and apply the middleware
 const docsMiddleware = autoDocs();
 app.use(docsMiddleware);
@@ -26,6 +29,10 @@ app.get(docsMiddleware.docsPath, docsMiddleware.docsHandler);
 // Your routes...
 app.get('/users', (req, res) => {
   res.json({ users: [] });
+});
+
+app.post('/users', (req, res) => {
+  res.json({ user: req.body });
 });
 
 app.listen(3000);
@@ -62,10 +69,11 @@ Then test with:
 ```bash
 # Make some requests
 curl http://localhost:3000/users
-curl -X POST http://localhost:3000/users
+curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d '{"name":"Manan","age":28,"skills":["Software engineering"]}'
+curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d '{"name":"John","email":"john@example.com"}'
 curl http://localhost:3000/users/123
 
-# View captured endpoints
+# View captured endpoints with inferred schemas
 curl http://localhost:3000/docs
 ```
 
@@ -88,8 +96,43 @@ The `/docs` endpoint returns:
       "path": "/users",
       "firstObserved": "2024-01-15T10:31:00.000Z",
       "hitCount": 2,
-      "lastObserved": "2024-01-15T10:35:00.000Z"
+      "lastObserved": "2024-01-15T10:35:00.000Z",
+      "bodySchema": {
+        "name": "string",
+        "age": "number",
+        "skills": "[]string"
+      }
     }
   ]
 }
 ```
+
+## Request Body Schema Inference
+
+The middleware automatically infers schemas from request bodies for POST, PUT, and PATCH requests. The schema is merged when multiple requests with different payloads are observed for the same endpoint.
+
+### Schema Types
+
+- Primitives: `"string"`, `"number"`, `"boolean"`, `"null"`
+- Arrays: `"[]string"`, `"[]number"`, `"[]object"`, etc.
+- Objects: `{ "field": "type", ... }`
+- Union types: `"string|number"` when different types are observed
+
+### Example Schema Merging
+
+If you send two POST requests to `/users`:
+
+1. `{"name":"Manan","age":28}`
+2. `{"name":"John","email":"john@example.com"}`
+
+The resulting schema will be:
+
+```json
+{
+  "name": "string",
+  "age": "number",
+  "email": "string"
+}
+```
+
+**Note:** Body parsing middleware (e.g., `express.json()`) must be applied **before** the autoDocs middleware for request body schema inference to work.
