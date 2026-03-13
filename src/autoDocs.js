@@ -129,6 +129,32 @@ function mergeTypeStrings(type1, type2) {
 }
 
 /**
+ * Normalizes a request path by replacing dynamic segments with placeholders
+ * @param {string} path - Request path
+ * @returns {string} Normalized path
+ */
+function normalizePath(path) {
+  if (!path || path === '/') return path;
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const mongoIdRegex = /^[0-9a-f]{24}$/i;
+  const numericIdRegex = /^\d+$/;
+
+  return path
+    .split('/')
+    .map((segment) => {
+      if (!segment) return segment;
+
+      const isDynamic = numericIdRegex.test(segment)
+        || uuidRegex.test(segment)
+        || mongoIdRegex.test(segment);
+
+      return isDynamic ? '{id}' : segment;
+    })
+    .join('/');
+}
+
+/**
  * Creates the autoDocs middleware instance
  * @param {Object} options - Configuration options
  * @param {string} options.docsPath - Path for the docs endpoint (default: '/docs')
@@ -174,12 +200,13 @@ function autoDocs(options = {}) {
    * @param {Object} bodySchema - Inferred schema from request body (optional)
    */
   function recordEndpoint(method, path, bodySchema = null) {
-    const key = getEndpointKey(method, path);
+    const normalizedPath = normalizePath(path);
+    const key = getEndpointKey(method, normalizedPath);
     
     if (!endpoints.has(key)) {
       const endpoint = {
         method,
-        path,
+        path: normalizedPath,
         firstObserved: new Date().toISOString(),
         hitCount: 1
       };
@@ -226,7 +253,8 @@ function autoDocs(options = {}) {
    */
   function captureResponseSchema(data, method, path) {
     const responseSchema = inferSchema(data);
-    const key = getEndpointKey(method, path);
+    const normalizedPath = normalizePath(path);
+    const key = getEndpointKey(method, normalizedPath);
     const endpoint = endpoints.get(key);
     if (endpoint) {
       mergeEndpointSchema(endpoint, 'responseSchema', responseSchema);
@@ -256,20 +284,22 @@ function autoDocs(options = {}) {
       bodySchema = inferSchema(req.body);
     }
 
+    const normalizedPath = normalizePath(req.path);
+
     // Record the endpoint with body schema if available
-    recordEndpoint(req.method, req.path, bodySchema);
+    recordEndpoint(req.method, normalizedPath, bodySchema);
 
     // Monkey patch res.json to capture response schema
     const originalJson = res.json;
     res.json = function(data) {
-      captureResponseSchema(data, req.method, req.path);
+      captureResponseSchema(data, req.method, normalizedPath);
       return originalJson.call(this, data);
     };
 
     // Monkey patch res.send to capture response schema
     const originalSend = res.send;
     res.send = function(data) {
-      captureResponseSchema(data, req.method, req.path);
+      captureResponseSchema(data, req.method, normalizedPath);
       return originalSend.call(this, data);
     };
 
