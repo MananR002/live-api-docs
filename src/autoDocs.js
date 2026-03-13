@@ -198,11 +198,12 @@ function autoDocs(options = {}) {
    * @param {string} method - HTTP method
    * @param {string} path - Request path
    * @param {Object} bodySchema - Inferred schema from request body (optional)
+   * @param {Object} querySchema - Inferred schema from query parameters (optional)
    */
-  function recordEndpoint(method, path, bodySchema = null) {
+  function recordEndpoint(method, path, bodySchema = null, querySchema = null) {
     const normalizedPath = normalizePath(path);
     const key = getEndpointKey(method, normalizedPath);
-    
+
     if (!endpoints.has(key)) {
       const endpoint = {
         method,
@@ -210,17 +211,20 @@ function autoDocs(options = {}) {
         firstObserved: new Date().toISOString(),
         hitCount: 1
       };
-      
+
       mergeEndpointSchema(endpoint, 'bodySchema', bodySchema);
-      
+      mergeEndpointSchema(endpoint, 'querySchema', querySchema);
+
       endpoints.set(key, endpoint);
     } else {
       const endpoint = endpoints.get(key);
       endpoint.hitCount += 1;
       endpoint.lastObserved = new Date().toISOString();
-      
+
       // Merge body schemas if provided
       mergeEndpointSchema(endpoint, 'bodySchema', bodySchema);
+      // Merge query schemas if provided
+      mergeEndpointSchema(endpoint, 'querySchema', querySchema);
     }
   }
 
@@ -279,15 +283,21 @@ function autoDocs(options = {}) {
     // Capture request body schema for POST and PUT requests
     let bodySchema = null;
     const methodsWithBody = ['POST', 'PUT', 'PATCH'];
-    
+
     if (methodsWithBody.includes(req.method) && req.body && typeof req.body === 'object') {
       bodySchema = inferSchema(req.body);
     }
 
+    // Capture query parameter schema if query has keys
+    let querySchema = null;
+    if (req.query && typeof req.query === 'object' && Object.keys(req.query).length > 0) {
+      querySchema = inferSchema(req.query);
+    }
+
     const normalizedPath = normalizePath(req.path);
 
-    // Record the endpoint with body schema if available
-    recordEndpoint(req.method, normalizedPath, bodySchema);
+    // Record the endpoint with body and query schemas if available
+    recordEndpoint(req.method, normalizedPath, bodySchema, querySchema);
 
     // Monkey patch res.json to capture response schema
     const originalJson = res.json;

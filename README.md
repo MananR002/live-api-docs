@@ -102,6 +102,11 @@ The `/docs` endpoint returns:
         "age": "number",
         "skills": "[]string"
       },
+      "querySchema": {
+        "page": "number",
+        "limit": "number",
+        "sort": "string"
+      },
       "responseSchema": {
         "message": "string",
         "data": {
@@ -121,7 +126,11 @@ The middleware automatically infers schemas from request bodies for POST, PUT, a
 
 ## Response Schema Inference
 
-The middleware monkey patches `res.json()` to infer response schemas and merge them across multiple responses for the same endpoint. Only JSON responses sent with `res.json()` are captured.
+The middleware monkey patches `res.json()` and `res.send()` to infer response schemas and merge them across multiple responses for the same endpoint.
+
+## Query Parameter Schema Inference
+
+The middleware automatically infers schemas from query parameters (`req.query`) for all requests. If query parameters are present, their schema is captured and merged across requests.
 
 ### Schema Types
 
@@ -147,4 +156,6 @@ The resulting schema will be:
 }
 ```
 
-**Note:** Body parsing middleware (e.g., `express.json()`) must be applied **before** the autoDocs middleware for request body schema inference to work.
+**Note:** 
+- Body parsing middleware (e.g., `express.json()`) must be applied **before** the autoDocs middleware for request body schema inference to work.
+- Query parsing middleware (e.g., `express.urlencoded()` or `qs`) must be applied **before** the autoDocs middleware for query parameter schema inference to work.
