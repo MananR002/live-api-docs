@@ -1,6 +1,6 @@
 # Live API Docs
 
-An automatic API documentation middleware for Express that tracks HTTP methods and paths for each request.
+An automatic API documentation middleware for Express that tracks HTTP methods and paths for each request and provides a live Swagger UI based on observed traffic.
 
 ## Installation
 
@@ -26,6 +26,18 @@ app.use(docsMiddleware);
 // Register the docs endpoint
 app.get(docsMiddleware.docsPath, docsMiddleware.docsHandler);
 
+// Register Swagger UI and JSON spec routes
+app.get(docsMiddleware.swaggerJsonPath, docsMiddleware.swaggerSpecHandler);
+app.use(
+  docsMiddleware.swaggerPath,
+  docsMiddleware.swaggerUi.serve,
+  docsMiddleware.swaggerUi.setup(null, {
+    swaggerOptions: {
+      url: docsMiddleware.swaggerJsonPath
+    }
+  })
+);
+
 // Your routes...
 app.get('/users', (req, res) => {
   res.json({ users: [] });
@@ -46,13 +58,22 @@ Creates a new autoDocs middleware instance.
 
 **Options:**
 - `docsPath` (string): Path for the docs endpoint. Default: `'/docs'`
+- `swaggerPath` (string): Path for the Swagger UI endpoint. Default: `'/live-api-docs-swagger'`
+- `swaggerJsonPath` (string): Path for the Swagger JSON endpoint. Default: `'/live-api-docs-swagger.json'`
+- `title` (string): Swagger UI title. Default: `'Live API Docs'`
+- `version` (string): Swagger version. Default: `'1.0.0'`
+- `description` (string): Swagger description text
 
 **Returns:** A middleware function with attached methods.
 
 ### Middleware Methods
 
 - `docsHandler` - Express route handler for the docs endpoint
+- `swaggerSpecHandler` - Express route handler for Swagger JSON
+- `swaggerUi` - Swagger UI middleware (from `swagger-ui-express`)
 - `docsPath` - The configured docs path (default: `/docs`)
+- `swaggerPath` - The configured Swagger UI path
+- `swaggerJsonPath` - The configured Swagger JSON path
 - `getEndpoints()` - Returns array of captured endpoints
 - `clearEndpoints()` - Clears all captured endpoints
 
@@ -75,6 +96,9 @@ curl http://localhost:3000/users/123
 
 # View captured endpoints with inferred schemas
 curl http://localhost:3000/docs
+
+# View Swagger UI
+open http://localhost:3000/live-api-docs-swagger
 ```
 
 ## Response Format

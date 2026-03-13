@@ -18,6 +18,18 @@ app.use(docsMiddleware);
 // Register the /docs endpoint using the built-in handler
 app.get(docsMiddleware.docsPath, docsMiddleware.docsHandler);
 
+// Register Swagger UI and JSON spec routes
+app.get(docsMiddleware.swaggerJsonPath, docsMiddleware.swaggerSpecHandler);
+app.use(
+  docsMiddleware.swaggerPath,
+  docsMiddleware.swaggerUi.serve,
+  docsMiddleware.swaggerUi.setup(null, {
+    swaggerOptions: {
+      url: docsMiddleware.swaggerJsonPath
+    }
+  })
+);
+
 // Sample routes for demonstration
 app.get('/users', (req, res) => {
   res.json({ message: 'Get all users', query: req.query });
@@ -59,6 +71,7 @@ app.listen(PORT, () => {
   console.log('  curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d \'{"name":"John","email":"john@example.com","age":25}\'');
   console.log('  curl http://localhost:3000/users/123');
   console.log('  curl http://localhost:3000/docs');
+  console.log('  open http://localhost:3000/live-api-docs-swagger');
 });
 
 module.exports = app;

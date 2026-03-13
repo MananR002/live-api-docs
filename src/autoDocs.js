@@ -5,6 +5,8 @@
  * and exposes a /docs endpoint to view captured endpoints.
  */
 
+const swaggerUi = require('swagger-ui-express');
+
 /**
  * Infers a schema from a value
  * @param {*} value - The value to infer schema from
@@ -161,7 +163,14 @@ function normalizePath(path) {
  * @returns {Function} Express middleware function with attached methods
  */
 function autoDocs(options = {}) {
-  const { docsPath = '/docs' } = options;
+  const {
+    docsPath = '/docs',
+    swaggerPath = '/live-api-docs-swagger',
+    swaggerJsonPath = '/live-api-docs-swagger.json',
+    title = 'Live API Docs',
+    version = '1.0.0',
+    description = 'Live API documentation generated from observed requests'
+  } = options;
 
   // Store for captured endpoints
   // Using a Map to store unique endpoints by "METHOD PATH" key
@@ -265,6 +274,141 @@ function autoDocs(options = {}) {
   }
 
   /**
+   * Converts inferred schema into an OpenAPI schema
+   * @param {*} schema - Inferred schema
+   * @returns {Object} OpenAPI schema
+   */
+  function toOpenApiSchema(schema) {
+    if (typeof schema === 'string') {
+      if (schema.startsWith('[]')) {
+        const itemType = schema.slice(2);
+        return {
+          type: 'array',
+          items: toOpenApiSchema(itemType)
+        };
+      }
+
+      if (schema.includes('|')) {
+        const types = schema.split('|').map((type) => toOpenApiSchema(type));
+        return {
+          oneOf: types
+        };
+      }
+
+      if (schema === 'number') return { type: 'number' };
+      if (schema === 'string') return { type: 'string' };
+      if (schema === 'boolean') return { type: 'boolean' };
+      if (schema === 'null') return { nullable: true };
+      if (schema === 'any' || schema === 'undefined') return {};
+
+      return { type: schema };
+    }
+
+    if (schema && typeof schema === 'object') {
+      const properties = {};
+      for (const [key, value] of Object.entries(schema)) {
+        properties[key] = toOpenApiSchema(value);
+      }
+
+      return {
+        type: 'object',
+        properties
+      };
+    }
+
+    return {};
+  }
+
+  /**
+   * Builds an OpenAPI spec based on observed endpoints
+   * @returns {Object} OpenAPI spec
+   */
+  function buildSwaggerSpec() {
+    const paths = {};
+
+    getEndpoints().forEach((endpoint) => {
+      if (endpoint.path === docsPath || endpoint.path === swaggerPath || endpoint.path === swaggerJsonPath) {
+        return;
+      }
+
+      const pathKey = endpoint.path.replace(/\{id\}/g, '{id}');
+      if (!paths[pathKey]) {
+        paths[pathKey] = {};
+      }
+
+      const methodKey = endpoint.method.toLowerCase();
+      const operation = {
+        summary: `${endpoint.method} ${endpoint.path}`,
+        responses: {}
+      };
+
+      if (endpoint.querySchema) {
+        operation.parameters = Object.entries(endpoint.querySchema).map(([name, schema]) => ({
+          name,
+          in: 'query',
+          required: false,
+          schema: toOpenApiSchema(schema)
+        }));
+      }
+
+      if (endpoint.bodySchema) {
+        operation.requestBody = {
+          required: false,
+          content: {
+            'application/json': {
+              schema: toOpenApiSchema(endpoint.bodySchema)
+            }
+          }
+        };
+      }
+
+      if (endpoint.responseSchema) {
+        Object.entries(endpoint.responseSchema).forEach(([statusCode, schema]) => {
+          operation.responses[statusCode] = {
+            description: `Response ${statusCode}`,
+            content: {
+              'application/json': {
+                schema: toOpenApiSchema(schema)
+              }
+            }
+          };
+        });
+      } else {
+        operation.responses['200'] = { description: 'Success' };
+      }
+
+      if (endpoint.path.includes('{id}')) {
+        operation.parameters = operation.parameters || [];
+        operation.parameters.push({
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' }
+        });
+      }
+
+      paths[pathKey][methodKey] = operation;
+    });
+
+    return {
+      openapi: '3.0.0',
+      info: {
+        title,
+        version,
+        description
+      },
+      paths
+    };
+  }
+
+  /**
+   * Express handler for swagger spec JSON
+   */
+  function swaggerSpecHandler(req, res) {
+    res.json(buildSwaggerSpec());
+  }
+
+  /**
    * Clears all captured endpoints
    */
   function clearEndpoints() {
@@ -291,8 +435,10 @@ function autoDocs(options = {}) {
    * The main middleware function
    */
   function middleware(req, res, next) {
+    const ignorePaths = new Set([docsPath, swaggerPath, swaggerJsonPath]);
+
     // Skip recording the docs endpoint itself
-    if (req.path === docsPath) {
+    if (ignorePaths.has(req.path)) {
       return next();
     }
 
@@ -357,9 +503,13 @@ function autoDocs(options = {}) {
 
   // Attach public methods to the middleware function
   middleware.docsHandler = docsHandler;
+  middleware.swaggerSpecHandler = swaggerSpecHandler;
+  middleware.swaggerUi = swaggerUi;
   middleware.getEndpoints = getEndpoints;
   middleware.clearEndpoints = clearEndpoints;
   middleware.docsPath = docsPath;
+  middleware.swaggerPath = swaggerPath;
+  middleware.swaggerJsonPath = swaggerJsonPath;
 
   return middleware;
 }
