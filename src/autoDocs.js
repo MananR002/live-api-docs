@@ -152,6 +152,22 @@ function autoDocs(options = {}) {
   }
 
   /**
+   * Merges a schema into an endpoint object
+   * @param {Object} endpoint - The endpoint object
+   * @param {string} schemaKey - The schema property key
+   * @param {*} schema - The schema to merge
+   */
+  function mergeEndpointSchema(endpoint, schemaKey, schema) {
+    if (!schema) return;
+
+    if (endpoint[schemaKey]) {
+      endpoint[schemaKey] = mergeSchemas(endpoint[schemaKey], schema);
+    } else {
+      endpoint[schemaKey] = schema;
+    }
+  }
+
+  /**
    * Records an endpoint observation
    * @param {string} method - HTTP method
    * @param {string} path - Request path
@@ -168,9 +184,7 @@ function autoDocs(options = {}) {
         hitCount: 1
       };
       
-      if (bodySchema) {
-        endpoint.bodySchema = bodySchema;
-      }
+      mergeEndpointSchema(endpoint, 'bodySchema', bodySchema);
       
       endpoints.set(key, endpoint);
     } else {
@@ -179,13 +193,7 @@ function autoDocs(options = {}) {
       endpoint.lastObserved = new Date().toISOString();
       
       // Merge body schemas if provided
-      if (bodySchema) {
-        if (endpoint.bodySchema) {
-          endpoint.bodySchema = mergeSchemas(endpoint.bodySchema, bodySchema);
-        } else {
-          endpoint.bodySchema = bodySchema;
-        }
-      }
+      mergeEndpointSchema(endpoint, 'bodySchema', bodySchema);
     }
   }
 
@@ -229,6 +237,21 @@ function autoDocs(options = {}) {
 
     // Record the endpoint with body schema if available
     recordEndpoint(req.method, req.path, bodySchema);
+
+    // Monkey patch res.json to capture response schema
+    const originalJson = res.json.bind(res);
+    res.json = (data) => {
+      if (data && typeof data === 'object') {
+        const responseSchema = inferSchema(data);
+        const key = getEndpointKey(req.method, req.path);
+        const endpoint = endpoints.get(key);
+        if (endpoint) {
+          mergeEndpointSchema(endpoint, 'responseSchema', responseSchema);
+        }
+      }
+
+      return originalJson(data);
+    };
 
     // Continue to next middleware
     next();

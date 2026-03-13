@@ -101,6 +101,14 @@ The `/docs` endpoint returns:
         "name": "string",
         "age": "number",
         "skills": "[]string"
+      },
+      "responseSchema": {
+        "message": "string",
+        "data": {
+          "name": "string",
+          "age": "number",
+          "skills": "[]string"
+        }
       }
     }
   ]
@@ -110,6 +118,10 @@ The `/docs` endpoint returns:
 ## Request Body Schema Inference
 
 The middleware automatically infers schemas from request bodies for POST, PUT, and PATCH requests. The schema is merged when multiple requests with different payloads are observed for the same endpoint.
+
+## Response Schema Inference
+
+The middleware monkey patches `res.json()` to infer response schemas and merge them across multiple responses for the same endpoint. Only JSON responses sent with `res.json()` are captured.
 
 ### Schema Types
 
