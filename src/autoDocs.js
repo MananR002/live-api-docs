@@ -219,6 +219,21 @@ function autoDocs(options = {}) {
   }
 
   /**
+   * Captures the response schema from the response data
+   * @param {*} data - The response data
+   * @param {string} method - HTTP method
+   * @param {string} path - Request path
+   */
+  function captureResponseSchema(data, method, path) {
+    const responseSchema = inferSchema(data);
+    const key = getEndpointKey(method, path);
+    const endpoint = endpoints.get(key);
+    if (endpoint) {
+      mergeEndpointSchema(endpoint, 'responseSchema', responseSchema);
+    }
+  }
+
+  /**
    * The main middleware function
    */
   function middleware(req, res, next) {
@@ -226,6 +241,12 @@ function autoDocs(options = {}) {
     if (req.path === docsPath) {
       return next();
     }
+
+    // Prevent double-patching if middleware runs twice
+    if (res._autoDocsPatched) {
+      return next();
+    }
+    res._autoDocsPatched = true;
 
     // Capture request body schema for POST and PUT requests
     let bodySchema = null;
@@ -239,18 +260,17 @@ function autoDocs(options = {}) {
     recordEndpoint(req.method, req.path, bodySchema);
 
     // Monkey patch res.json to capture response schema
-    const originalJson = res.json.bind(res);
-    res.json = (data) => {
-      if (data && typeof data === 'object') {
-        const responseSchema = inferSchema(data);
-        const key = getEndpointKey(req.method, req.path);
-        const endpoint = endpoints.get(key);
-        if (endpoint) {
-          mergeEndpointSchema(endpoint, 'responseSchema', responseSchema);
-        }
-      }
+    const originalJson = res.json;
+    res.json = function(data) {
+      captureResponseSchema(data, req.method, req.path);
+      return originalJson.call(this, data);
+    };
 
-      return originalJson(data);
+    // Monkey patch res.send to capture response schema
+    const originalSend = res.send;
+    res.send = function(data) {
+      captureResponseSchema(data, req.method, req.path);
+      return originalSend.call(this, data);
     };
 
     // Continue to next middleware
