@@ -292,14 +292,20 @@ function autoDocs(options = {}) {
     // Monkey patch res.json to capture response schema
     const originalJson = res.json;
     res.json = function(data) {
-      captureResponseSchema(data, req.method, normalizedPath);
+      if (!res._autoDocsResponseCaptured) {
+        captureResponseSchema(data, req.method, normalizedPath);
+        res._autoDocsResponseCaptured = true;
+      }
       return originalJson.call(this, data);
     };
 
     // Monkey patch res.send to capture response schema
     const originalSend = res.send;
     res.send = function(data) {
-      captureResponseSchema(data, req.method, normalizedPath);
+      if (!res._autoDocsResponseCaptured) {
+        captureResponseSchema(data, req.method, normalizedPath);
+        res._autoDocsResponseCaptured = true;
+      }
       return originalSend.call(this, data);
     };
 
