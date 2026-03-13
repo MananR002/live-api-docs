@@ -108,11 +108,16 @@ The `/docs` endpoint returns:
         "sort": "string"
       },
       "responseSchema": {
-        "message": "string",
-        "data": {
-          "name": "string",
-          "age": "number",
-          "skills": "[]string"
+        "200": {
+          "message": "string",
+          "data": {
+            "name": "string",
+            "age": "number",
+            "skills": "[]string"
+          }
+        },
+        "404": {
+          "error": "string"
         }
       }
     }
@@ -126,7 +131,7 @@ The middleware automatically infers schemas from request bodies for POST, PUT, a
 
 ## Response Schema Inference
 
-The middleware monkey patches `res.json()` and `res.send()` to infer response schemas and merge them across multiple responses for the same endpoint.
+The middleware monkey patches `res.json()` and `res.send()` to infer response schemas and merge them across multiple responses for the same endpoint. Response schemas are grouped by status code (e.g., "200", "404").
 
 ## Query Parameter Schema Inference
 

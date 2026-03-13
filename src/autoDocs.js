@@ -194,6 +194,28 @@ function autoDocs(options = {}) {
   }
 
   /**
+   * Merges a response schema into an endpoint by status code
+   * @param {Object} endpoint - The endpoint object
+   * @param {number|string} statusCode - HTTP status code
+   * @param {*} schema - The schema to merge
+   */
+  function mergeResponseSchema(endpoint, statusCode, schema) {
+    if (!schema) return;
+
+    const codeKey = String(statusCode || 200);
+
+    if (!endpoint.responseSchema || typeof endpoint.responseSchema !== 'object' || Array.isArray(endpoint.responseSchema)) {
+      endpoint.responseSchema = {};
+    }
+
+    if (endpoint.responseSchema[codeKey]) {
+      endpoint.responseSchema[codeKey] = mergeSchemas(endpoint.responseSchema[codeKey], schema);
+    } else {
+      endpoint.responseSchema[codeKey] = schema;
+    }
+  }
+
+  /**
    * Records an endpoint observation
    * @param {string} method - HTTP method
    * @param {string} path - Request path
@@ -255,13 +277,13 @@ function autoDocs(options = {}) {
    * @param {string} method - HTTP method
    * @param {string} path - Request path
    */
-  function captureResponseSchema(data, method, path) {
+  function captureResponseSchema(data, method, path, statusCode) {
     const responseSchema = inferSchema(data);
     const normalizedPath = normalizePath(path);
     const key = getEndpointKey(method, normalizedPath);
     const endpoint = endpoints.get(key);
     if (endpoint) {
-      mergeEndpointSchema(endpoint, 'responseSchema', responseSchema);
+      mergeResponseSchema(endpoint, statusCode, responseSchema);
     }
   }
 
@@ -303,7 +325,7 @@ function autoDocs(options = {}) {
     const originalJson = res.json;
     res.json = function(data) {
       if (!res._autoDocsResponseCaptured) {
-        captureResponseSchema(data, req.method, normalizedPath);
+        captureResponseSchema(data, req.method, normalizedPath, res.statusCode);
         res._autoDocsResponseCaptured = true;
       }
       return originalJson.call(this, data);
@@ -313,7 +335,7 @@ function autoDocs(options = {}) {
     const originalSend = res.send;
     res.send = function(data) {
       if (!res._autoDocsResponseCaptured) {
-        captureResponseSchema(data, req.method, normalizedPath);
+        captureResponseSchema(data, req.method, normalizedPath, res.statusCode);
         res._autoDocsResponseCaptured = true;
       }
       return originalSend.call(this, data);
